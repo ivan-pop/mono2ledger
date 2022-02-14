@@ -183,7 +183,7 @@ if __name__ == "__main__":
         "files",
         metavar="PATH",
         nargs="+",
-        help="Path to file containing downloaded statement from monobank.",
+        help="Path to monobank card statement.",
         type=argparse.FileType(),
     )
 

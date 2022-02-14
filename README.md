@@ -20,6 +20,20 @@ specified in config file.
   ledger entries. This should make output a bit prettier
 - Specifying config file with command-line flag
 
+## Usage:
+```shell
+usage: mono2ledger.py [-h] PATH [PATH ...]
+
+Convert monobank csv statement to ledger transactions.
+
+positional arguments:
+  PATH        Path to monobank card statement.
+
+optional arguments:
+  -h, --help  show this help message and exit
+mono2ledger.py [-h] PATH [PATH ...]
+```
+
 ## Example config with descriptions of options in comments:
 ```ini
 # DEFAULT section contains script options
