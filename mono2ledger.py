@@ -9,6 +9,7 @@ import csv
 import sys
 import argparse
 import datetime
+from pathlib import Path
 from collections import namedtuple
 
 # TODO: StatementItem -> StatementEntry
@@ -194,9 +195,7 @@ if __name__ == "__main__":
         file_path = os.path.abspath(file.name)
         sha256_sum = sha256_checksum(file_path)
 
-        backup_file = (
-            f"{backup_dir}/backup-{ledger_file}-{file_datetime}.ledger"
-        )
+        backup_file = f"{backup_dir}/backup-{Path(ledger_file).stem}-{file_datetime}.ledger"
 
         # Header and footer inserted before and after converter output
         header = (
