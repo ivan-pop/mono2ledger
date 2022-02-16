@@ -229,7 +229,7 @@ if __name__ == "__main__":
         # Read lines from csv into list, since we need to reverse it
         # to get entries from statement in correct order
         entries = list(reader)
-        items = [StatementItem(row) for row in reversed(entries)]
+        items = [StatementItem(row).to_ledger() for row in reversed(entries)]
         if items:
             # Backup ledger file
             with open(f"{backup_file}", "w") as bak:
@@ -245,6 +245,6 @@ if __name__ == "__main__":
                     ledger.write(header)
                 for item in items:
                     if not dont_edit:
-                        ledger.write(item.to_ledger() + "\n")
+                        ledger.write(item + "\n")
                 if not dont_edit:
                     ledger.write(footer)
