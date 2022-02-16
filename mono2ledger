@@ -21,8 +21,6 @@ STATEMENT_DATETIME_FORMAT = "%d.%m.%Y %H:%M:%S"
 LEDGER_DATE_FORMAT = "%Y/%m/%d"
 # Datetime format used in header
 HEADER_DATETIME_FORMAT = "%Y/%m/%d %H:%M:%S"
-# Datetime format used in backup file name
-FILE_DATETIME_FORMAT = "%Y%m%d-%H%M%S"
 
 INCOME_KEY = "income"
 OUTCOME_KEY = "outcome"
@@ -40,11 +38,6 @@ config.read(config_file)
 cashback_account = config["DEFAULT"]["cashback_account"]
 card_account = config["DEFAULT"]["card_account"]
 ledger_file = os.path.expanduser(config["DEFAULT"]["ledger_file"])
-backup_dir = os.path.expanduser(config["DEFAULT"]["backup_dir"])
-
-# Create backup dir if it does not exist
-if not os.path.isdir(backup_dir):
-    os.makedirs(backup_dir)
 
 
 def get_statement_item_config(item):
@@ -208,11 +201,8 @@ if __name__ == "__main__":
     for file in files:
         current_datetime = datetime.datetime.now()
         header_datetime = current_datetime.strftime(HEADER_DATETIME_FORMAT)
-        file_datetime = current_datetime.strftime(FILE_DATETIME_FORMAT)
         file_path = os.path.abspath(file.name)
         sha256_sum = sha256_checksum(file_path)
-
-        backup_file = f"{backup_dir}/backup-{Path(ledger_file).stem}-{file_datetime}.ledger"
 
         # Header and footer inserted before and after converter output
         header = (
@@ -230,21 +220,10 @@ if __name__ == "__main__":
         # to get entries from statement in correct order
         entries = list(reader)
         items = [StatementItem(row).to_ledger() for row in reversed(entries)]
-        if items:
-            # Backup ledger file
-            with open(f"{backup_file}", "w") as bak:
-                with open(f"{ledger_file}", "r") as orig:
-                    print(f"Writing backup to {backup_file}")
-                    if not dont_edit:
-                        bak.write(orig.read())
-
+        if items and not dont_edit:
             with open(f"{ledger_file}", "a") as ledger:
                 print(f"Writing entries to {ledger_file}")
-
-                if not dont_edit:
-                    ledger.write(header)
+                ledger.write(header)
                 for item in items:
-                    if not dont_edit:
-                        ledger.write(item + "\n")
-                if not dont_edit:
-                    ledger.write(footer)
+                    ledger.write(item + "\n")
+                ledger.write(footer)

@@ -5,12 +5,10 @@ entries.
 
 It takes list of files as input, and uses options from config file located at
 `$XDG_CONFIG_HOME/mono2ledger/config.ini` or `~/.config/mono2ledger/config.ini`
-to set ledger options, setup account names and payees to be associated with
+to set script options, setup account names and payees to be associated with
 entries in statements.
 
-This script should never override ledger file, only append to it, and make
-backup of ledger file before writing anything, backup is stored in directory
-specified in config file.
+This script should never override ledger file, only append to it.
 
 ## Not implemented/TODO
 - Handling of exchanges between currencies and any other currencies other than
@@ -44,8 +42,6 @@ card_account=Assets:Credit Card
 cashback_account=income:cashback:credit_card
 # Ledger file to which converted output will be appended
 ledger_file=~/.local/share/ledger/journal.ledger
-# Directory in which backups will be stored
-backup_dir=~/.local/share/ledger/backup
 # All other sections have format <MCC>/<regexp>
 # Where MCC matches MCC of entry and regexp (uses python regexp)
 # matches description of entry.
