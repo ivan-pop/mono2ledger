@@ -186,6 +186,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Convert monobank csv statement to ledger transactions.",
     )
+    # TODO: I think there were more common keys for this, but i dont remember them atm
+    parser.add_argument(
+        "-n",
+        "--no-edit",
+        help="Do not edit ledger files, just print output as if they were",
+        action="store_true",
+    )
     parser.add_argument(
         "files",
         metavar="PATH",
@@ -194,7 +201,10 @@ if __name__ == "__main__":
         type=argparse.FileType(),
     )
 
-    files = parser.parse_args().files
+    args = parser.parse_args()
+    files = args.files
+    dont_edit = args.no_edit
+
     for file in files:
         current_datetime = datetime.datetime.now()
         header_datetime = current_datetime.strftime(HEADER_DATETIME_FORMAT)
@@ -221,13 +231,16 @@ if __name__ == "__main__":
             with open(f"{backup_file}", "w") as bak:
                 with open(f"{ledger_file}", "r") as orig:
                     print(f"Writing backup to {backup_file}")
-                    bak.write(orig.read())
+                    if not dont_edit:
+                        bak.write(orig.read())
 
             with open(f"{ledger_file}", "a") as ledger:
                 print(f"Writing entries to {ledger_file}")
 
-                ledger.write(header)
+                if not dont_edit:
+                    ledger.write(header)
                 for item in items:
-                    ledger.write(item.to_ledger() + "\n")
-
-                ledger.write(footer)
+                    if not dont_edit:
+                        ledger.write(item.to_ledger() + "\n")
+                if not dont_edit:
+                    ledger.write(footer)

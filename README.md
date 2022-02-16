@@ -22,16 +22,16 @@ specified in config file.
 
 ## Usage:
 ```shell
-usage: mono2ledger.py [-h] PATH [PATH ...]
+usage: mono2ledger [-h] [-n] PATH [PATH ...]
 
 Convert monobank csv statement to ledger transactions.
 
 positional arguments:
-  PATH        Path to monobank card statement.
+  PATH           Path to monobank card statement.
 
 optional arguments:
-  -h, --help  show this help message and exit
-mono2ledger.py [-h] PATH [PATH ...]
+  -h, --help     show this help message and exit
+  -n, --no-edit  Do not edit ledger files, just print output as if they were
 ```
 
 ## Example config with descriptions of options in comments:
