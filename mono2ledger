@@ -80,7 +80,7 @@ class StatementItem:
         config = get_statement_item_config(self)
         return (
             config[INCOME_KEY]
-            if self.currency_amount > 0
+            if self.currency_amount < 0
             else config[OUTCOME_KEY]
         )
 
@@ -135,20 +135,27 @@ class StatementItem:
             """
             Return value converted to float if it is not None, None otherwise.
             """
-            if val:
-                return float(val)
+            return float(val) if val else None
 
         self.datetime = datetime.datetime.strptime(
             row[0], STATEMENT_DATETIME_FORMAT
         )
         self.description = get_col(1)
         self.mcc = get_col(2)
-        self.currency_amount = float(get_col(3))
-        self.operation_amount = float(get_col(4))
+        # NOTE: I need to reverse symbols on numbers because what counts as
+        # income in ledger is "i take money from some account and put it into
+        # my account", and same for outcome, and since statement does not use
+        # double-entry i need to reverse symbols in it
+        self.currency_amount = -float(get_col(3))
+        self.operation_amount = -float(get_col(4))
         self.currency = get_col(5)
         self.exchange_rate = float_if_not_none(get_col(6))
         self.commission = float_if_not_none(get_col(7))
         self.cashback = float_if_not_none(get_col(8))
+
+        # Same for cashback
+        if self.cashback:
+            self.cashback = -self.cashback
 
         self._check_fields()
 
