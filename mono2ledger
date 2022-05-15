@@ -2,14 +2,10 @@
 import argparse
 import configparser
 import csv
-import datetime
-import hashlib
 import os
 import re
-import sys
-import textwrap
-from collections import namedtuple
-from pathlib import Path
+from datetime import datetime
+
 
 # TODO: StatementItem -> StatementEntry
 
@@ -165,15 +161,6 @@ class StatementItem:
         )
 
 
-def sha256_checksum(path, block_size=65536):
-    "Return sha256 checksum of file at path"
-    sha256 = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(block_size), b""):
-            sha256.update(block)
-    return sha256.hexdigest()
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Convert monobank csv statement to ledger transactions.",
@@ -197,21 +184,16 @@ if __name__ == "__main__":
     files = args.files
     dont_edit = args.no_edit
 
+    header_datetime = datetime.now().strftime(HEADER_DATETIME_FORMAT)
+
+    # Header and footer inserted before and after converter output
+    header = (
+        f"\n;; Begin converter output\n"
+        f";; Date and time: {header_datetime}\n"
+    )
+    footer = ";; End converter output\n"
+
     for file in files:
-        current_datetime = datetime.datetime.now()
-        header_datetime = current_datetime.strftime(HEADER_DATETIME_FORMAT)
-        file_path = os.path.abspath(file.name)
-        sha256_sum = sha256_checksum(file_path)
-
-        # Header and footer inserted before and after converter output
-        header = (
-            f"\n;; Begin converter output\n"
-            f";; Date and time: {header_datetime}\n"
-            f";; File: {file_path}\n"
-            f";; SHA256: {sha256_sum}\n\n"
-        )
-        footer = ";; End converter output\n"
-
         reader = csv.reader(file)
         next(reader)  # Skip field titles
 
