@@ -4,8 +4,10 @@ import configparser
 import csv
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
+import requests
+from pycountry import currencies
 
 # TODO: StatementItem -> StatementEntry
 
@@ -48,7 +50,7 @@ def get_statement_item_config(item):
         mcc = key.split("/")[0]
         regexp = "".join(key.split("/")[1:])
 
-        if item.mcc == mcc and re.match(regexp, item.description):
+        if str(item.mcc) == mcc and re.match(regexp, item.description):
             return config[key]
 
     raise ValueError(
@@ -87,7 +89,7 @@ class StatementItem:
         Assert that not yet supported fields dont have unexpected values
         """
         assert self.currency_amount == self.operation_amount
-        assert self.exchange_rate == None
+        assert self.exchange_rate is None
         assert self.currency == "UAH"
 
     def to_ledger(self):
@@ -111,40 +113,67 @@ class StatementItem:
 
         return ret
 
-    def __init__(self, row):
+    def convert_from_csv(self, row):
         def get_col(pos):
-            """
-            Return properly typed value from column, None if column is empty
-            """
+            """Return value from column, None if column is empty."""
             col = row[pos]
             return col if col != "—" else None
 
-        def float_if_not_none(val):
+        def float_or_none(val):
             """
-            Return value converted to float if it is not None, None otherwise.
+            Return value converted to float if it is not None or None
             """
             return float(val) if val else None
 
-        self.datetime = datetime.datetime.strptime(
-            row[0], STATEMENT_DATETIME_FORMAT
-        )
+        self.datetime = datetime.strptime(row[0], STATEMENT_DATETIME_FORMAT)
         self.description = get_col(1)
         self.mcc = get_col(2)
-        # NOTE: I need to reverse symbols on numbers because what counts as
-        # income in ledger is "i take money from some account and put it into
-        # my account", and same for outcome, and since statement does not use
-        # double-entry i need to reverse symbols in it
-        self.currency_amount = -float(get_col(3))
-        self.operation_amount = -float(get_col(4))
+        self.currency_amount = float(get_col(3))
+        self.operation_amount = float(get_col(4))
         self.currency = get_col(5)
-        self.exchange_rate = float_if_not_none(get_col(6))
-        self.commission = float_if_not_none(get_col(7))
-        self.cashback = float_if_not_none(get_col(8))
+        self.exchange_rate = float_or_none(get_col(6))
+        self.commission = float_or_none(get_col(7))
+        self.cashback = float_or_none(get_col(8))
 
-        # Same for cashback
+    def convert_from_json(self, row):
+        def amount_to_float(val):
+            """
+            monobank stores floats as ints with last two numbers being
+            cents, convert it to float
+            """
+            return val / 100
+
+        self.datetime = datetime.fromtimestamp(row["time"])
+        self.description = row["description"]
+        self.mcc = row["mcc"]
+        self.currency_amount = amount_to_float(row["amount"])
+        self.operation_amount = amount_to_float(row["operationAmount"])
+        self.currency = currencies.get(
+            numeric=str(row["currencyCode"])
+        ).alpha_3
+        # TODO: Figure out how to calculate this
+        # self.exchange_rate = float(row['amount']) / float(row['operationAmount'])
+        self.exchange_rate = None
+        self.commision = amount_to_float(row["commissionRate"])
+        self.cashback = amount_to_float(row["cashbackAmount"])
+
+    def reverse_values(self):
+        """
+        Reverse symbol on numbers since we are dealing with
+        double-entry in ledger.
+        """
+        self.currency_amount = -self.currency_amount
+        self.operation_amount = -self.operation_amount
+
         if self.cashback:
             self.cashback = -self.cashback
 
+    def __init__(self, row, as_json=False):
+        if as_json:
+            self.convert_from_json(row)
+        else:
+            self.convert_from_csv(row)
+        self.reverse_values()
         self._check_fields()
 
     def __str__(self):
@@ -161,6 +190,42 @@ class StatementItem:
         )
 
 
+def get_last_transaction_date():
+    """
+    Return date of the last ledger transaction as unix
+    timestamp.
+    """
+    TRANSACTION_PATTERN = re.compile(r"\d{4}[/|-]\d{2}[/|-]\d{2}")
+
+    with open(ledger_file) as file:
+        for line in file.readlines():
+            if match := TRANSACTION_PATTERN.findall(line):
+                result = match[0]
+        return datetime.strptime(result, "%Y/%m/%d")
+
+
+def fetch_statement(api_key, from_time, to_time=datetime.now(), account="0"):
+    """
+    Fetch statement in json format from the time last ledger entry
+    was added.
+    Account 0 just uses default account, I have no idea how to get
+    account ids.
+    """
+
+    url = (
+        "https://api.monobank.ua/personal/statement"
+        f"/{account}"
+        f"/{int(from_time.timestamp())}"
+        f"/{int(to_time.timestamp())}"
+    )
+    result = requests.get(url, headers={"X-Token": api_key})
+
+    if result.status_code != 200:
+        raise ValueError(result.json())
+
+    return result.json()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Convert monobank csv statement to ledger transactions.",
@@ -175,13 +240,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "files",
         metavar="PATH",
-        nargs="+",
+        nargs="*",
         help="Path to monobank card statement.",
         type=argparse.FileType(),
     )
 
     args = parser.parse_args()
-    files = args.files
     dont_edit = args.no_edit
 
     header_datetime = datetime.now().strftime(HEADER_DATETIME_FORMAT)
@@ -193,18 +257,44 @@ if __name__ == "__main__":
     )
     footer = ";; End converter output\n"
 
-    for file in files:
-        reader = csv.reader(file)
-        next(reader)  # Skip field titles
+    if api_key := os.getenv("MONOBANK_API_KEY"):
+        last_transaction_date = get_last_transaction_date()
+        if (last_transaction_date - datetime.now()).days <= -31:
+            err = (
+                "monobank API does not support fetching statements "
+                "from more that 31 days.\nUse non-api method instead."
+            )
+            print(err)
+            exit(1)
 
-        # Read lines from csv into list, since we need to reverse it
-        # to get entries from statement in correct order
-        entries = list(reader)
-        items = [StatementItem(row).to_ledger() for row in reversed(entries)]
-        if items and not dont_edit:
-            with open(f"{ledger_file}", "a") as ledger:
-                print(f"Writing entries to {ledger_file}")
-                ledger.write(header)
-                for item in items:
-                    ledger.write(item + "\n")
-                ledger.write(footer)
+        items = [
+            StatementItem(entry, as_json=True).to_ledger()
+            for entry in reversed(
+                fetch_statement(api_key, last_transaction_date)
+            )
+        ]
+        pass
+
+    else:
+        files = args.files
+        if not files:
+            print("When using non-api method you must provide files to parse.")
+            exit(1)
+
+        items = []
+        for file in files:
+            reader = csv.reader(file)
+            next(reader)  # Skip field titles
+
+            items.append(
+                StatementItem(row).to_ledger()
+                for row in reversed(list(reader))
+            )
+
+    if items and not dont_edit:
+        with open(f"{ledger_file}", "a") as ledger:
+            print(f"Writing entries to {ledger_file}")
+            ledger.write(header)
+            for item in items:
+                ledger.write(item + "\n")
+            ledger.write(footer)
